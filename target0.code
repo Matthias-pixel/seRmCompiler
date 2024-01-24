@@ -1,0 +1,6 @@
+var current_number = 100 //Comment
+var acc = 0
+while(current_number >= 0) {
+    acc += current_number
+    current_number--
+}

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>seRm Compiler</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nabla&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Ubuntu+Mono&display=swap&display=swap" rel="stylesheet">
+
+    <script>
+        function compile() {
+            try {
+                const input = document.querySelector("#code-input").value;
+                
+                const lines = input.split("\n");
+            
+                const vars = {"#c1": 0};
+                let currentRegister = 1;
+                const whileStack = [];
+
+                const output = ["DLOAD 1", "STORE 0"];
+
+                for(let i = 0; i < lines.length; i++) {
+                    let line = lines[i];
+                    line = line.split("//")[0];
+                    line = line.trim();
+                    if(line.startsWith("var")) {
+                        line = line.substring(4);
+                        const varName = line.split("=")[0].trim();
+                        const varValue = line.split("=")[1].trim();
+                        vars[varName] = currentRegister
+                        output.push(`DLOAD ${varValue}`);
+                        output.push(`STORE ${currentRegister}`);
+                        currentRegister++;
+                    } else if(line.startsWith("while")) {
+                        const condition = line.split("(")[1].split(")")[0].split(" ");
+                        const varName = condition[0];
+                        const operator = condition[1];
+                        const comparator = condition[2];
+                        if(comparator === "0") {
+                            whileStack.push({
+                                varName, operator, skipComparator: true, startAddr: output.length
+                            });
+                        } else {
+                            let comparatorVarName = "";
+                            try {
+                                const immediate = parseInt(comparator);
+                                if(isNaN(immediate)) throw new Error();
+                                comparatorVarName = "#i@"+i;
+                                vars[comparatorVarName] = currentRegister
+                                output.push(`DLOAD ${immediate}`);
+                                output.push(`STORE ${currentRegister}`);
+                                currentRegister++;
+                            } catch(e) {
+                                comparatorVarName = comparator;
+                            }
+                            whileStack.push({
+                                varName, operator, skipComparator: false, comparatorVarName, startAddr: output.length
+                            });
+                        }
+                    } else if(line.startsWith("}")) {
+                        whileStackEntry = whileStack[whileStack.length-1];
+                        output.push(`LOAD ${vars[whileStackEntry.varName]}`);
+                        if(whileStackEntry.operator === ">=") {
+                            if(!whileStackEntry.skipComparator) {
+                                output.push(`SUB ${vars[whileStackEntry.comparatorVarName]}`);
+                            } else {
+                                output.push(`JGE ${whileStackEntry.startAddr}`);
+                            }
+                        } else {
+                            alert("Invalid operator");
+                        }
+                    } else {
+                        let varName = line.split(" ")[0];
+                        if(varName.endsWith("--")) {
+                            varName = varName.split("--")[0];
+                            output.push(`LOAD ${vars[varName]}`);
+                            output.push(`SUB 0`);
+                            output.push(`STORE ${vars[varName]}`);
+                        } else if(varName.endsWith("++")) {
+                            varName = varName.split("++")[0];
+                            output.push(`LOAD ${vars[varName]}`);
+                            output.push(`ADD 0`);
+                            output.push(`STORE ${vars[varName]}`);
+                        } else {
+                            const operator = line.split(" ")[1];
+                            const modifier = line.split(" ")[2];
+                            let modifierVarName = "";
+                            try {
+                                const immediate = parseInt(modifier);
+                                if(isNaN(immediate)) throw new Error();
+                                modifierVarName = "#i@"+i;
+                                vars[modifierVarName] = currentRegister
+                                output.push(`DLOAD ${immediate}`);
+                                output.push(`STORE ${currentRegister}`);
+                                currentRegister++;
+                            } catch(e) {
+                                modifierVarName = modifier;
+                            }
+                            if(operator === "=") {
+                                output.push(`LOAD ${vars[modifierVarName]}`);
+                                output.push(`STORE ${vars[varName]}`);
+                            } else if(operator === "+=") {
+                                output.push(`LOAD ${vars[varName]}`);
+                                output.push(`ADD ${vars[modifierVarName]}`);
+                                output.push(`STORE ${vars[varName]}`);
+                            } else if(operator === "-=") {
+                                output.push(`LOAD ${vars[varName]}`);
+                                output.push(`SUB ${vars[modifierVarName]}`);
+                                output.push(`STORE ${vars[varName]}`);
+                            }
+                        }
+                    }
+                }
+                output.push("END");
+                for(let i = 0; i < output.length; i++) {
+                    output[i] = `${i}: ${output[i]}`;
+                }
+                document.querySelector("#code-output").value = output.join("\n");
+            } catch(e) {
+                console.error(e);
+            }
+        }
+    </script>
+</head>
+<body>
+    <div style="width: 100%; height: 100%; background-color: black; display: flex; flex-direction: column; align-items: center; justify-content: start;">
+        <h1 style="color: white; font-family: Roboto;">.code -> .seRm COMPILER</h1>
+        <div style="width: 90%; height: 50rem; display: flex; flex-direction: row; justify-content: space-evenly; align-items: center;">
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <textarea id="code-input" style="background-color: rgba(255, 255, 255, 0.1); color: white; font-size: 2rem; font-family: 'Ubuntu Mono'; margin-bottom: 1em;" name="Code Input" cols="40" rows="20" onchange="compile()"></textarea>
+                <button style="font-size: 2em; width: fit-content; background-color: rgba(255, 255, 255, 0.1); color: white; border-radius: 0.3em; border: 1px solid white;">Upload Source Code</button>
+            </div>
+            <p style="color: white; font-size: 3rem; font-family: 'Ubuntu Mono';">=></p>
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <textarea id="code-output" style="background-color: rgba(255, 255, 255, 0.1); color: white; font-size: 2rem; font-family: 'Ubuntu Mono'; margin-bottom: 1em;" name="Code Input" cols="40" rows="20" readonly></textarea>
+                <button style="font-size: 2em; width: fit-content; background-color: rgba(255, 255, 255, 0.1); color: white; border-radius: 0.3em; border: 1px solid white;">Download seRm Code</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+<style>
+    html, body {
+        background-color: black;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+</style>
